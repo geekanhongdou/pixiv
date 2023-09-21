@@ -1,0 +1,28 @@
+name: wiebitte
+
+on:
+  push:
+    paths:
+      - '.github/workflows/antics.v2.original.yml'
+      - '.github/workflows/antics.v3.original.yml'
+
+jobs:
+  wiebitte:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        repository: ${{ github.repository }}
+        token: ${{ secrets.CLARATHONK }}
+
+    - name: clarathonk
+      run: |
+        function generateyml() {     [ "$1" ] && iteration="$1" || iteration=20;     originalfile=".github/workflows/$2.original.yml";     resultfile=".github/workflows/$2.yml";     linenum=`cat "$originalfile" | grep -n "Start Dumping" | tail -1 | grep -Eo "[0-9]+"`;     cat "$originalfile" | head -"$((linenum-1))" | sed "s/ (original//g" > "$resultfile";     for iter in `seq 2 $iteration`;     do         cat "$originalfile" | tail +"$((linenum))" | sed "s/partPlaceholder/part$iter/g;s/Partplaceholder/Part $iter/g" >> "$resultfile";         echo >> "$resultfile";     done; }; generateyml 114 "antics.v2"; generateyml 114 "antics.v3";
+        git config --global user.name '${{ github.actor }}'
+        git config --global user.email '${{ github.actor }}@users.noreply.github.com'
+        git add /home/runner/work/pixiv/pixiv/.github/workflows/antics.v2.yml
+        git add /home/runner/work/pixiv/pixiv/.github/workflows/antics.v3.yml
+        git commit -am "generated antics.v2.yml and antics.v3.yml"
+        git remote set-url origin https://x-access-token:${{ secrets.CLARATHONK }}@github.com/${{ github.repository }}
+        git push
