@@ -1,0 +1,160 @@
+# This is a basic workflow that is manually triggered
+
+name: pixiv antics v3 (original
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    # Inputs the workflow accepts.
+    inputs:
+      mode:
+        description: 'Dump by Artist ID (artist), Tags (tags), Artist ID and Tags combined (combined), or download files in existed list files (list)? '
+        default: 'artist'
+        required: true
+      parameters:
+        description: 'curl parameters used by pixiv: '
+        default: ''
+        required: true
+      loglevel:
+        description: 'Log Level (silent, default, verbose): '
+        default: 'default'
+        required: true
+      artist:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Artist ID: '
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      tags:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Tags: '
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      listurl:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'List URL: '
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      archivefilename:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Archive Filename: '
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      mysteriousbashscripturl:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'URL of the mysterious bash script that would apply for every rar archive made in the process: '
+        # Default value if no value is explicitly provided
+        default: ''
+        # Input has to be provided for the workflow to run
+        required: false
+      filesperdownload:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Files Per Download: '
+        # Default value if no value is explicitly provided
+        default: '1145'
+        # Input has to be provided for the workflow to run
+        required: true
+      quota:
+        # Friendly description to be shown in the UI instead of 'name'
+        description: 'Filesize Per Upload (in MB: '
+        # Default value if no value is explicitly provided
+        default: '4096'
+        # Input has to be provided for the workflow to run
+        required: true
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "pixivdump"
+  pixivdump:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    - name: Checkout Codes
+      uses: actions/checkout@v4
+
+    - name: Start Analyzing
+      run: |
+        wget "https://github.com/P3TERX/Aria2-Pro-Core/releases/download/1.36.0_2021.08.22/aria2-1.36.0-static-linux-amd64.tar.gz"
+        tar -xvzf aria2-1.36.0-static-linux-amd64.tar.gz
+        chmod +x aria2c
+        wget "https://www.rarlab.com/rar/rarlinux-x64-6.0.2.tar.gz"
+        tar -xvzf rarlinux-x64-6.0.2.tar.gz
+        chmod +x rar/rar
+        [ "${{ github.event.inputs.parameters }}" ] && echo "${{ github.event.inputs.parameters }}" | sed "s/-H 'Accept-Encoding: gzip, deflate, br' //g;s/--compressed//g;s/curl '[^']*' //g" > parameters.txt || echo "-H 'Referer: https://www.pixiv.net/artworks/1145141919810'" > parameters.txt
+        sed -i "s/..\/aria2c/# ..\/aria2c/g;s/rm list -f/# rm list -f/g" pixiv.sh
+        mkdir wiebitte; cd wiebitte
+        [ "${{ github.event.inputs.mode }}" = "list" ] && aria2c "${{ github.event.inputs.listurl }}" --out "list" || bash ../pixiv.sh "${{ github.event.inputs.loglevel }}" "${{ github.event.inputs.mode }}" "${{ github.event.inputs.artist }}" "${{ github.event.inputs.tags }}"
+        mv list ../
+        cd ..
+    
+    - name: Upload List
+      uses: actions/upload-artifact@v3
+      with:
+        name: list
+        path: "list"
+      
+    - name: Start Dumping
+      if: hashFiles('list')
+      continue-on-error: true
+      run: |
+        sed 's/____github.event.inputs.quota----/${{ github.event.inputs.quota }}/g;s/____github.event.inputs.filesperdownload----/${{ github.event.inputs.filesperdownload }}/g;s/____github.event.inputs.archivefilename----/${{ github.event.inputs.archivefilename }}/g;s/____github.event.inputs.mode----/${{ github.event.inputs.mode }}/g;s/____github.event.inputs.artist----/${{ github.event.inputs.artist }}/g;s/____github.event.inputs.tags----/${{ github.event.inputs.tags }}/g;s/.partplaceholder//g' dumptemplate.sh > dump.sh
+        bash dump.sh; rm -f dump.sh
+        if [ "${{ github.event.inputs.mysteriousbashscripturl }}" ]; then mysteriousbashscripturl="${{ github.event.inputs.mysteriousbashscripturl }}"; wget "$mysteriousbashscripturl" > /dev/null 2> /dev/null; for file in `ls | grep -E "\.rar$"`; do bash "${mysteriousbashscripturl##*/}" "$file" > /dev/null 2> /dev/null; done; fi; rm "${mysteriousbashscripturl##*/}" -f
+    
+    - name: Upload "Artifact"
+      if: hashFiles('*.rar')
+      uses: actions/upload-artifact@v3
+      with:
+        name: wiebitte
+        path: "*.rar"
+
+    - name: Pre-Cleanup
+      if: hashFiles('*.114514')
+      run: |
+        for file in `ls | grep -E "\.114514$"`; do mv "$file" "${file%.114514}"; done
+
+    - name: Cleanup
+      if: hashFiles('*.rar')
+      run: |
+        ls -lh
+        echo
+        stat *
+        rm *.rar -f
+
+    - name: Start Dumping Partplaceholder
+      if: hashFiles('list')
+      continue-on-error: true
+      run: |
+        sed 's/____github.event.inputs.quota----/${{ github.event.inputs.quota }}/g;s/____github.event.inputs.filesperdownload----/${{ github.event.inputs.filesperdownload }}/g;s/____github.event.inputs.archivefilename----/${{ github.event.inputs.archivefilename }}/g;s/____github.event.inputs.mode----/${{ github.event.inputs.mode }}/g;s/____github.event.inputs.artist----/${{ github.event.inputs.artist }}/g;s/____github.event.inputs.tags----/${{ github.event.inputs.tags }}/g;s/partplaceholder/partPlaceholder/g' dumptemplate.sh > dump.sh
+        bash dump.sh; rm -f dump.sh
+        if [ "${{ github.event.inputs.mysteriousbashscripturl }}" ]; then mysteriousbashscripturl="${{ github.event.inputs.mysteriousbashscripturl }}"; wget "$mysteriousbashscripturl" > /dev/null 2> /dev/null; for file in `ls | grep -E "\.rar$"`; do bash "${mysteriousbashscripturl##*/}" "$file" > /dev/null 2> /dev/null; done; fi; rm "${mysteriousbashscripturl##*/}" -f
+        
+    - name: Upload "Artifact" Partplaceholder
+      uses: actions/upload-artifact@v3
+      if: hashFiles('*.rar')
+      with:
+        name: wiebitte.partPlaceholder
+        path: "*.rar"
+        
+    - name: Pre-Cleanup
+      if: hashFiles('*.114514')
+      run: |
+        for file in `ls | grep -E "\.114514$"`; do mv "$file" "${file%.114514}"; done
+
+    - name: Cleanup
+      if: hashFiles('*.rar')
+      run: |
+        ls -lh
+        echo
+        stat *
+        rm *.rar -f
